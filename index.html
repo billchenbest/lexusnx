@@ -351,10 +351,16 @@
 
     <div id="maintain-section" class="section-content">
         <div class="row mb-3">
-            <div class="col-12">
+            <div class="col-6">
                 <div class="stat-card">
                     <div class="stat-label">總保養花費</div>
                     <div class="stat-value" id="total-maintain-cost">--</div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="stat-card">
+                    <div class="stat-label">總實付金額</div>
+                    <div class="stat-value" id="total-maintain-paid">--</div>
                 </div>
             </div>
         </div>
@@ -493,7 +499,7 @@
                         <hr>
                         <div class="mb-2"><label class="form-label">日期</label><input type="date" class="form-control" id="m_date" required></div>
                         <div class="mb-2"><label class="form-label">里程 (km)</label><input type="number" class="form-control" id="m_km" required></div>
-                        <div class="mb-2"><label class="form-label">保養金額</label><input type="number" class="form-control" id="m_cost" required></div>
+                        <input type="hidden" id="m_cost" value="0">
                         <div class="mb-2"><label class="form-label">折抵點數</label><input type="number" class="form-control" id="m_points" value="0"></div>
                         <div class="mb-3"><label class="form-label">實付金額</label><input type="number" class="form-control" id="m_paid" required></div>
                         <button type="submit" class="btn btn-primary w-100">儲存</button>
@@ -508,7 +514,7 @@
     
     <script>
         // ★★★ 請將下方的網址換成您剛剛部署 GAS 產生的網址 ★★★
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbxV1Unb6LntpoO9j_tXyhi9RuJh_CuGgzztOoQ3x7WFI2L6pgJQ_-e-u9bxxZ1Qzsbudg/exec";
+        const GAS_URL = "https://script.google.com/macros/s/AKfycby9OAlc9hfigY2-SUdS-WTuiCQmX-i7xAoRRGDcCoqqo7VxSfz8bmdSN8d3QHJW5WlbPw/exec";
 
         // 全域變數
         let fuelData = [];
@@ -520,6 +526,11 @@
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('f_date').valueAsDate = new Date();
             document.getElementById('m_date').valueAsDate = new Date();
+
+            // 保養金額：自動計算 (折抵點數 + 實付金額)
+            document.getElementById('m_points').addEventListener('input', updateMaintainCostAuto);
+            document.getElementById('m_paid').addEventListener('input', updateMaintainCostAuto);
+            updateMaintainCostAuto();
 
             // 載入資料
             loadData();
@@ -541,6 +552,9 @@
                 resetMaintainFormState();
                 document.getElementById('maintainForm').reset();
                 document.getElementById('m_date').valueAsDate = new Date();
+                const fileInput = document.querySelector('#maintainForm input[type="file"]');
+                if (fileInput) fileInput.value = '';
+                updateMaintainCostAuto();
             });
         });
 
@@ -580,6 +594,29 @@
             const d = new Date(dateStr);
             if(isNaN(d.getTime())) return dateStr; 
             return d.toISOString().split('T')[0];
+        }
+
+        function updateMaintainCostAuto() {
+            const points = Number(document.getElementById('m_points')?.value || 0);
+            const paid = Number(document.getElementById('m_paid')?.value || 0);
+            const costEl = document.getElementById('m_cost');
+            if (!costEl) return;
+            costEl.value = String(points + paid);
+        }
+
+        // 將檔案物件轉換為 Base64 字串
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    // readAsDataURL 會回傳 "data:image/jpeg;base64,....."
+                    // 我們要把逗號前面的標頭拿掉，只傳送逗號後的編碼內容
+                    const content = String(reader.result || "").split(',')[1] || "";
+                    resolve(content);
+                };
+                reader.onerror = error => reject(error);
+            });
         }
 
         // 通用傳送資料函式 (使用 text/plain 避免 CORS 預檢問題)
@@ -633,7 +670,47 @@
             const submitBtn = e.target.querySelector('button[type="submit"]');
             const originalBtnText = submitBtn.innerText;
             submitBtn.disabled = true;
-            submitBtn.innerText = "處理中...";
+            submitBtn.innerText = "上傳照片並儲存中..."; // 提示使用者這步會比較久
+
+            // 確保送出前先更新一次自動計算金額
+            updateMaintainCostAuto();
+
+            // 取得檔案輸入框
+            const fileInput = e.target.querySelector('input[type="file"]');
+            const file = fileInput && fileInput.files && fileInput.files.length > 0 ? fileInput.files[0] : null;
+
+            let fileData = "";
+            let fileName = "";
+            let mimeType = "";
+
+            // 如果有選檔案，進行轉換
+            if (file) {
+                try {
+                    // 簡單的防呆：如果檔案大於 5MB 提示一下 (GAS 限制較大但網路慢會傳很久)
+                    if (file.size > 5 * 1024 * 1024) {
+                        if(!confirm("照片超過 5MB，上傳可能會很久，確定要繼續嗎？")) {
+                            submitBtn.disabled = false;
+                            submitBtn.innerText = originalBtnText;
+                            return;
+                        }
+                    }
+                    fileData = await fileToBase64(file);
+                    fileName = file.name;
+                    mimeType = file.type;
+                } catch (err) {
+                    console.error("檔案轉換失敗", err);
+                    alert("照片處理失敗");
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = originalBtnText;
+                    return;
+                }
+            }
+            
+            // 找出目前這筆資料的舊圖片連結 (如果是編輯模式)
+            let currentRecord = null;
+            if (editingMaintainId) {
+                currentRecord = maintainData.find(x => x.id === editingMaintainId);
+            }
 
             const record = {
                 id: editingMaintainId,
@@ -641,7 +718,13 @@
                 km: Number(document.getElementById('m_km').value),
                 cost: Number(document.getElementById('m_cost').value),
                 points: Number(document.getElementById('m_points').value || 0),
-                paid: Number(document.getElementById('m_paid').value)
+                paid: Number(document.getElementById('m_paid').value),
+                // 如果是編輯模式且沒選新檔案，把舊的連結傳回去，不然 GAS 會以為沒圖
+                imageUrl: currentRecord && currentRecord.imageUrl ? currentRecord.imageUrl : "", 
+                // 檔案資料
+                fileData: fileData,
+                fileName: fileName,
+                mimeType: mimeType
             };
 
             const action = editingMaintainId ? 'edit' : 'add';
@@ -651,6 +734,8 @@
                 loadData();
                 const modal = bootstrap.Modal.getInstance(document.getElementById('maintainModal'));
                 modal.hide();
+                // 清空 file input，以免下次打開還留著
+                if (fileInput) fileInput.value = ''; 
             } catch (error) {
                 alert("連線失敗：" + error);
             } finally {
@@ -722,11 +807,14 @@
             document.querySelector('#maintainModal .modal-title').innerText = '編輯保養紀錄';
             document.querySelector('#maintainForm button[type="submit"]').innerText = '更新';
 
+            const fileInput = document.querySelector('#maintainForm input[type="file"]');
+            if (fileInput) fileInput.value = '';
+
             document.getElementById('m_date').value = record.date;
             document.getElementById('m_km').value = record.km;
-            document.getElementById('m_cost').value = record.cost;
             document.getElementById('m_points').value = record.points;
             document.getElementById('m_paid').value = record.paid;
+            updateMaintainCostAuto();
         }
 
         function resetMaintainFormState() {
@@ -860,15 +948,22 @@
             tbody.innerHTML = '';
             let labels = [], costs = [], paids = [], kms = [];
             let totalMaintainCost = 0;
+            let totalMaintainPaid = 0;
 
             maintainData.forEach(d => {
                 totalMaintainCost += d.cost;
+                totalMaintainPaid += d.paid;
+                // 檢查 d.imageUrl 是否有值，有的話顯示按鈕
+                const imgBtn = d.imageUrl ? 
+                    `<a href="${d.imageUrl}" target="_blank" class="btn btn-sm btn-outline-info me-1"><i class="fa-solid fa-image"></i></a>` : 
+                    ``;
                 const row = `<tr>
                 <td>${d.date}</td>
                 <td>${d.km}</td>
                 <td>${d.cost}</td>
                 <td>${d.paid}</td>
                 <td>
+                    ${imgBtn}
                     <button class="btn btn-sm btn-outline-secondary me-1" onclick="editMaintain('${d.id}')"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteMaintain('${d.id}')"><i class="fa-solid fa-trash"></i></button>
                 </td>
@@ -877,6 +972,7 @@
                 labels.push(d.date); costs.push(d.cost); paids.push(d.paid); kms.push(d.km);
             });
             document.getElementById('total-maintain-cost').innerText = "$" + totalMaintainCost.toLocaleString();
+            document.getElementById('total-maintain-paid').innerText = "$" + totalMaintainPaid.toLocaleString();
             renderMaintainChart(labels, costs, paids, kms);
         }
 
@@ -958,3 +1054,4 @@
     </script>
 </body>
 </html>
+
