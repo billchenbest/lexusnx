@@ -1,0 +1,960 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LEXUS NX 資訊系統</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Lexus_logo.svg/1200px-Lexus_logo.svg.png">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --lexus-black: #1a1a1a;
+            --lexus-gold: #CFB378;
+            --bg-color: #f5f7fa;
+            --card-radius: 24px;
+            --shadow-soft: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
+            --shadow-hover: 0 20px 40px -5px rgba(0, 0, 0, 0.1);
+        }
+        body { 
+            background-color: var(--bg-color); 
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Heiti TC", "Microsoft JhengHei", sans-serif; 
+            padding-bottom: 120px; 
+            color: #333;
+        }
+        .header { 
+            background: rgba(255, 255, 255, 0.95); 
+            backdrop-filter: blur(10px);
+            color: var(--lexus-black); 
+            padding: 15px; 
+            text-align: center; 
+            position: sticky; 
+            top: 0; 
+            z-index: 1000; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03); 
+            border-bottom-left-radius: 30px;
+            border-bottom-right-radius: 30px;
+        }
+        .nav-bottom { 
+            position: fixed; 
+            bottom: calc(20px + env(safe-area-inset-bottom)); 
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 450px;
+            background: rgba(255, 255, 255, 0.5); 
+            backdrop-filter: blur(25px) saturate(200%);
+            -webkit-backdrop-filter: blur(25px) saturate(200%);
+            border: 1px solid rgba(255, 255, 255, 0.6); 
+            display: flex; 
+            justify-content: space-around; 
+            padding: 15px 0; 
+            z-index: 1000; 
+            box-shadow: 
+                0 15px 35px rgba(0,0,0,0.1),
+                inset 0 1px 0 rgba(255,255,255,0.8);
+            border-radius: 50px;
+            isolation: isolate;
+            overflow: hidden;
+        }
+        /* iOS-like liquid glass highlight */
+        #nav-highlight {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 0;
+            width: 0;
+            border-radius: 999px;
+            pointer-events: none;
+            z-index: 0;
+
+            background: rgba(255, 255, 255, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.55);
+            box-shadow:
+                0 10px 25px rgba(0,0,0,0.12),
+                inset 0 1px 0 rgba(255,255,255,0.65);
+            backdrop-filter: blur(22px) saturate(180%);
+            -webkit-backdrop-filter: blur(22px) saturate(180%);
+
+            will-change: left, top, width, height;
+
+            transition:
+                left 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+                top 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+                width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+                height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        #nav-highlight::before {
+            content: "";
+            position: absolute;
+            inset: 2px;
+            border-radius: inherit;
+            background:
+                radial-gradient(120% 160% at 28% 18%, rgba(255,255,255,0.65), rgba(255,255,255,0) 60%),
+                radial-gradient(120% 160% at 72% 85%, rgba(207,179,120,0.22), rgba(207,179,120,0) 62%);
+            opacity: 0.95;
+        }
+        #nav-highlight::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            box-shadow:
+                inset 0 0 0 1px rgba(207,179,120,0.18),
+                inset 0 -10px 20px rgba(0,0,0,0.06);
+            opacity: 0.9;
+        }
+
+        .nav-item { text-align: center; color: #aaa; font-size: 0.75rem; cursor: pointer; flex: 1; transition: all 0.3s; position: relative; z-index: 1; }
+        .nav-item.active { color: var(--lexus-black); font-weight: 800; transform: translateY(-2px); }
+        .nav-item i { font-size: 1.5rem; display: block; margin-bottom: 6px; }
+        
+        .card-custom { 
+            border: none; 
+            border-radius: var(--card-radius); 
+            box-shadow: var(--shadow-soft); 
+            margin-bottom: 24px; 
+            background: #fff;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-hover);
+        }
+        .lexus-gold { color: var(--lexus-gold); }
+        .section-content { display: none; padding: 24px 20px; animation: fadeIn 0.4s ease-out; }
+        .section-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .chart-container { position: relative; height: 300px; width: 100%; margin-bottom: 20px; }
+        .form-label { font-weight: 700; font-size: 0.95rem; color: #444; margin-bottom: 8px; }
+        
+        .stat-card { 
+            background: #fff; 
+            padding: 24px; 
+            border-radius: var(--card-radius); 
+            text-align: center; 
+            box-shadow: var(--shadow-soft); 
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .stat-card:hover { 
+            transform: translateY(-2px); 
+            box-shadow: var(--shadow-hover);
+        }
+        .stat-value { font-size: 1.6rem; font-weight: 800; color: var(--lexus-black); letter-spacing: -0.5px; }
+        .stat-label { font-size: 0.9rem; color: #888; margin-bottom: 8px; font-weight: 500; }
+
+        /* Table Styling */
+        .table-custom { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .table-custom thead th { 
+            background-color: #f8f9fa; 
+            color: #666; 
+            font-weight: 700; 
+            padding: 12px; 
+            border: none; 
+            font-size: 0.85rem;
+        }
+        .table-custom thead th:first-child { border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
+        .table-custom thead th:last-child { border-top-right-radius: 12px; border-bottom-right-radius: 12px; }
+        .table-custom tbody td { 
+            padding: 12px; 
+            border-bottom: 1px solid #f0f0f0; 
+            color: #333; 
+            font-size: 0.9rem;
+            vertical-align: middle;
+        }
+        .table-custom tbody tr:last-child td { border-bottom: none; }
+
+        /* FAB Styles */
+        .fab-container {
+            position: fixed;
+            bottom: calc(110px + env(safe-area-inset-bottom));
+            right: 24px;
+            z-index: 1050;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform: scale(0); /* Hidden by default */
+        }
+        .fab-container.show {
+            transform: scale(1);
+        }
+        .fab-btn {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--lexus-black);
+            color: var(--lexus-gold);
+            border: none;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.3s, box-shadow 0.3s;
+        }
+        .fab-btn:active { transform: scale(0.9); }
+        .fab-btn:hover { background-color: #000; box-shadow: 0 12px 30px rgba(0,0,0,0.3); }
+
+        /* Modal & Form Beautification */
+        .modal-content { border-radius: 30px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+        .modal-header { border-bottom: 1px solid #f0f0f0; padding: 24px 30px; }
+        .modal-body { padding: 30px; }
+        .form-control, .form-select {
+            border-radius: 16px;
+            padding: 14px;
+            border: 1px solid #eee;
+            background-color: #f8f9fa;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        .form-control:focus, .form-select:focus {
+            box-shadow: 0 0 0 4px rgba(207, 179, 120, 0.15);
+            border-color: var(--lexus-gold);
+            background-color: #fff;
+        }
+        .btn-primary {
+            background-color: var(--lexus-black);
+            border-color: var(--lexus-black);
+            color: var(--lexus-gold);
+            border-radius: 16px;
+            padding: 14px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+        }
+        .btn-primary:hover {
+            background-color: #000;
+            border-color: #000;
+            color: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        /* Circle Button Styles */
+        .circle-btn-container {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            margin-top: 20px;
+        }
+        .circle-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-decoration: none;
+            color: #333;
+            width: 80px;
+            transition: transform 0.2s;
+        }
+        .circle-btn:hover { transform: translateY(-2px); }
+        .circle-btn-icon {
+            width: 64px;
+            height: 64px;
+            background: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            color: var(--lexus-black);
+            /* Embossed Effect */
+            box-shadow: 
+                0 6px 15px rgba(0,0,0,0.08),
+                0 2px 4px rgba(0,0,0,0.02);
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.8);
+        }
+        .circle-btn:hover .circle-btn-icon {
+            box-shadow: 
+                0 10px 25px rgba(0,0,0,0.12),
+                0 4px 8px rgba(0,0,0,0.05);
+            color: var(--lexus-gold);
+        }
+        .circle-btn-text {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #555;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h5 class="m-0" style="font-weight: 800; letter-spacing: 1px;"><i class="fa-solid fa-car lexus-gold"></i> LEXUS NX</h5>
+    </div>
+
+    <div id="fuel-section" class="section-content active">
+        <div class="row mb-3">
+            <div class="col-6">
+                <div class="stat-card">
+                    <div class="stat-label">平均油耗</div>
+                    <div class="stat-value" id="avg-fuel-cons">--</div>
+                </div>
+            </div>
+            <div class="col-6">
+                 <div class="stat-card">
+                    <div class="stat-label">總花費</div>
+                    <div class="stat-value" id="total-fuel-cost">--</div>
+                 </div>
+            </div>
+        </div>
+
+        <div class="card card-custom p-3">
+            <h6 class="text-center mb-3">費用分析 (金額 & 累加)</h6>
+            <div class="chart-container">
+                <canvas id="fuelCostChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card card-custom p-3">
+            <h6 class="text-center mb-3">效能分析 (里程 & 油耗)</h6>
+            <div class="chart-container">
+                <canvas id="fuelEffChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card card-custom p-3">
+            <h6><i class="fa-solid fa-list"></i> 歷史紀錄</h6>
+            <div class="table-responsive">
+                <table class="table table-custom table-hover">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>里程</th>
+                            <th>油量</th>
+                            <th>油耗</th>
+                            <th>金額</th>
+                            <th style="width: 110px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fuel-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="maintain-section" class="section-content">
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="stat-card">
+                    <div class="stat-label">總保養花費</div>
+                    <div class="stat-value" id="total-maintain-cost">--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card card-custom p-3">
+            <h6 class="text-center mb-3">保養費用趨勢</h6>
+            <div class="chart-container">
+                <canvas id="maintainChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card card-custom p-3">
+            <h6><i class="fa-solid fa-file-invoice"></i> 保養歷程</h6>
+            <div class="table-responsive">
+                <table class="table table-custom table-hover">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>里程</th>
+                            <th>保養金額</th>
+                            <th>實付</th>
+                            <th style="width: 110px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="maintain-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="info-section" class="section-content">
+        
+        <div class="card card-custom mb-3">
+            <div class="card-body">
+                <h5 class="card-title text-center mb-3">專屬服務專員</h5>
+                <div class="text-center mb-3">
+                    <i class="fa-solid fa-user-tie fa-3x mb-2 text-secondary"></i>
+                    <h4>鍾承諭 <span class="fs-6 text-muted">銷售課長</span></h4>
+                    <p class="text-muted">高都汽車股份有限公司 建國營業所</p>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item"><i class="fa-solid fa-location-dot me-2 text-danger"></i> 830 高雄市鳳山區建國路三段 386 號</li>
+                    <li class="list-group-item"><i class="fa-solid fa-phone me-2 text-primary"></i> <a href="tel:077805077" class="text-decoration-none">07-780-5077</a></li>
+                    <li class="list-group-item"><i class="fa-solid fa-mobile me-2 text-primary"></i> <a href="tel:0929191937" class="text-decoration-none">0929-191-937</a></li>
+                    <li class="list-group-item"><i class="fa-solid fa-envelope me-2 text-primary"></i> <a href="mailto:AFGA607@lexus.com.tw" class="text-decoration-none">AFGA607@lexus.com.tw</a></li>
+                    <li class="list-group-item"><i class="fa-solid fa-fax me-2"></i> 07-777-4211</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="circle-btn-container">
+            <a href="https://www.lexus.com.tw/" target="_blank" class="circle-btn">
+                <div class="circle-btn-icon"><i class="fa-solid fa-globe"></i></div>
+                <span class="circle-btn-text">官方網站</span>
+            </a>
+            <a href="https://www.lexus.com.tw/news.aspx" target="_blank" class="circle-btn">
+                <div class="circle-btn-icon"><i class="fa-regular fa-newspaper"></i></div>
+                <span class="circle-btn-text">最新消息</span>
+            </a>
+            <a href="https://www.lexus.com.tw/contact.aspx" target="_blank" class="circle-btn">
+                <div class="circle-btn-icon"><i class="fa-solid fa-headset"></i></div>
+                <span class="circle-btn-text">官方客服</span>
+            </a>
+        </div>
+    </div>
+
+    <div id="main-fab" class="fab-container show">
+        <button class="fab-btn" onclick="handleFabClick()">
+            <i id="fab-icon" class="fa-solid fa-plus"></i>
+        </button>
+    </div>
+
+    <div class="nav-bottom">
+        <div id="nav-highlight" aria-hidden="true"></div>
+        <div class="nav-item active" onclick="switchTab('fuel')">
+            <i class="fa-solid fa-gas-pump"></i> 加油紀錄
+        </div>
+        <div class="nav-item" onclick="switchTab('maintain')">
+            <i class="fa-solid fa-screwdriver-wrench"></i> 保養紀錄
+        </div>
+        <div class="nav-item" onclick="switchTab('info')">
+            <i class="fa-solid fa-id-card"></i> 資訊/專員
+        </div>
+    </div>
+
+    <div class="modal fade" id="fuelModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新增加油紀錄</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="fuelForm">
+                        <div class="mb-2"><label class="form-label">日期</label><input type="date" class="form-control" id="f_date" required></div>
+                        <div class="mb-2"><label class="form-label">里程 (km)</label><input type="number" class="form-control" id="f_km" required></div>
+                        <div class="mb-2"><label class="form-label">金額 (元)</label><input type="number" class="form-control" id="f_cost" required></div>
+                        <div class="mb-2"><label class="form-label">油量 (L)</label><input type="number" step="0.01" class="form-control" id="f_liter" required></div>
+                        <div class="mb-2"><label class="form-label">油品</label>
+                            <select class="form-select" id="f_type">
+                                <option value="98 無鉛汽油">98 無鉛汽油</option>
+                                <option value="95 無鉛汽油">95 無鉛汽油</option>
+                                <option value="92 無鉛汽油" selected>92 無鉛汽油</option>
+                            </select>
+                        </div>
+                        <div class="mb-2"><label class="form-label">加油方式</label>
+                            <select class="form-select" id="f_method" onchange="togglePriceInput()">
+                                <option value="self">自助加油</option>
+                                <option value="manual">人工加油</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" id="price_label">自助油價 (元/L)</label>
+                            <input type="number" step="0.1" class="form-control" id="f_unit_price">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">儲存</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="maintainModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新增保養紀錄</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="maintainForm">
+                        <div class="mb-3">
+                            <label class="form-label">上傳服務明細表 (圖片)</label>
+                            <input type="file" class="form-control" accept="image/*">
+                        </div>
+                        <hr>
+                        <div class="mb-2"><label class="form-label">日期</label><input type="date" class="form-control" id="m_date" required></div>
+                        <div class="mb-2"><label class="form-label">里程 (km)</label><input type="number" class="form-control" id="m_km" required></div>
+                        <div class="mb-2"><label class="form-label">保養金額</label><input type="number" class="form-control" id="m_cost" required></div>
+                        <div class="mb-2"><label class="form-label">折抵點數</label><input type="number" class="form-control" id="m_points" value="0"></div>
+                        <div class="mb-3"><label class="form-label">實付金額</label><input type="number" class="form-control" id="m_paid" required></div>
+                        <button type="submit" class="btn btn-primary w-100">儲存</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        // ★★★ 請將下方的網址換成您剛剛部署 GAS 產生的網址 ★★★
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbxV1Unb6LntpoO9j_tXyhi9RuJh_CuGgzztOoQ3x7WFI2L6pgJQ_-e-u9bxxZ1Qzsbudg/exec";
+
+        // 全域變數
+        let fuelData = [];
+        let maintainData = [];
+        let chart1, chart2, chart3;
+        let editingFuelId = null;
+        let editingMaintainId = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('f_date').valueAsDate = new Date();
+            document.getElementById('m_date').valueAsDate = new Date();
+
+            // 載入資料
+            loadData();
+
+            // 導覽列與 Modal 初始化 (維持原樣)
+            requestAnimationFrame(() => updateNavHighlight());
+            window.addEventListener('resize', () => updateNavHighlight());
+
+            // Modal 關閉重置
+            const fuelModalEl = document.getElementById('fuelModal');
+            fuelModalEl.addEventListener('hidden.bs.modal', () => {
+                resetFuelFormState();
+                document.getElementById('fuelForm').reset();
+                document.getElementById('f_date').valueAsDate = new Date();
+            });
+
+            const maintainModalEl = document.getElementById('maintainModal');
+            maintainModalEl.addEventListener('hidden.bs.modal', () => {
+                resetMaintainFormState();
+                document.getElementById('maintainForm').reset();
+                document.getElementById('m_date').valueAsDate = new Date();
+            });
+        });
+
+        // --- 核心功能：與 GAS 溝通 ---
+
+        function loadData() {
+            // 顯示載入中... (可選)
+
+            // 載入加油紀錄
+            fetch(`${GAS_URL}?op=fuel`)
+                .then(res => res.json())
+                .then(data => {
+                    // 資料處理：確保數字格式正確，並依日期排序
+                    fuelData = data.map(d => ({
+                        ...d,
+                        date: formatDate(d.date) // GAS 傳回的日期格式可能需轉換
+                    })).sort((a, b) => new Date(a.date) - new Date(b.date));
+                    updateFuelUI();
+                })
+                .catch(err => console.error("載入加油失敗", err));
+
+            // 載入保養紀錄
+            fetch(`${GAS_URL}?op=maintain`)
+                .then(res => res.json())
+                .then(data => {
+                    maintainData = data.map(d => ({
+                        ...d,
+                        date: formatDate(d.date)
+                    })).sort((a, b) => new Date(a.date) - new Date(b.date));
+                    updateMaintainUI();
+                })
+                .catch(err => console.error("載入保養失敗", err));
+        }
+
+        // 日期格式化小工具 (處理 Google Sheet 回傳的日期字串)
+        function formatDate(dateStr) {
+            const d = new Date(dateStr);
+            if(isNaN(d.getTime())) return dateStr; 
+            return d.toISOString().split('T')[0];
+        }
+
+        // 通用傳送資料函式 (使用 text/plain 避免 CORS 預檢問題)
+        function sendToGAS(payload) {
+            return fetch(GAS_URL, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain" },
+                body: JSON.stringify(payload)
+            }).then(res => res.json());
+        }
+
+        // --- 表單提交邏輯 ---
+
+        document.getElementById('fuelForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn.innerText;
+            submitBtn.disabled = true;
+            submitBtn.innerText = "處理中...";
+
+            const record = {
+                id: editingFuelId, // 如果是新增，這裡是 null
+                date: document.getElementById('f_date').value,
+                km: Number(document.getElementById('f_km').value),
+                cost: Number(document.getElementById('f_cost').value),
+                liter: Number(document.getElementById('f_liter').value),
+                type: document.getElementById('f_type').value,
+                method: document.getElementById('f_method').value,
+                unitPrice: Number(document.getElementById('f_unit_price').value || 0)
+            };
+
+            const action = editingFuelId ? 'edit' : 'add';
+
+            try {
+                await sendToGAS({ type: 'fuel', action: action, data: record });
+                // 重新載入資料以更新畫面
+                loadData();
+
+                const modal = bootstrap.Modal.getInstance(document.getElementById('fuelModal'));
+                modal.hide();
+            } catch (error) {
+                alert("連線失敗：" + error);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = originalBtnText;
+            }
+        });
+
+        document.getElementById('maintainForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn.innerText;
+            submitBtn.disabled = true;
+            submitBtn.innerText = "處理中...";
+
+            const record = {
+                id: editingMaintainId,
+                date: document.getElementById('m_date').value,
+                km: Number(document.getElementById('m_km').value),
+                cost: Number(document.getElementById('m_cost').value),
+                points: Number(document.getElementById('m_points').value || 0),
+                paid: Number(document.getElementById('m_paid').value)
+            };
+
+            const action = editingMaintainId ? 'edit' : 'add';
+
+            try {
+                await sendToGAS({ type: 'maintain', action: action, data: record });
+                loadData();
+                const modal = bootstrap.Modal.getInstance(document.getElementById('maintainModal'));
+                modal.hide();
+            } catch (error) {
+                alert("連線失敗：" + error);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = originalBtnText;
+            }
+        });
+
+        // --- 編輯與刪除 ---
+
+        window.deleteFuel = async function(id) {
+            if (!confirm('確定刪除?')) return;
+            try {
+                await sendToGAS({ type: 'fuel', action: 'delete', data: { id: id } });
+                loadData(); // 重新整理列表
+            } catch(e) { alert('刪除失敗'); }
+        }
+
+        window.deleteMaintain = async function(id) {
+            if (!confirm('確定刪除?')) return;
+            try {
+                await sendToGAS({ type: 'maintain', action: 'delete', data: { id: id } });
+                loadData();
+            } catch(e) { alert('刪除失敗'); }
+        }
+
+        // 編輯功能 (UI 操作)
+        window.editFuel = function(id) {
+            const record = fuelData.find(x => x.id === id);
+            if (!record) return;
+            setFuelFormToEditMode(record);
+            const modal = new bootstrap.Modal(document.getElementById('fuelModal'));
+            modal.show();
+        }
+
+        window.editMaintain = function(id) {
+            const record = maintainData.find(x => x.id === id);
+            if (!record) return;
+            setMaintainFormToEditMode(record);
+            const modal = new bootstrap.Modal(document.getElementById('maintainModal'));
+            modal.show();
+        }
+
+        // --- UI 輔助函式 (與您原本的幾乎一樣) ---
+
+        function setFuelFormToEditMode(record) {
+            editingFuelId = record.id;
+            document.querySelector('#fuelModal .modal-title').innerText = '編輯加油紀錄';
+            document.querySelector('#fuelForm button[type="submit"]').innerText = '更新';
+
+            document.getElementById('f_date').value = record.date;
+            document.getElementById('f_km').value = record.km;
+            document.getElementById('f_cost').value = record.cost;
+            document.getElementById('f_liter').value = record.liter;
+            document.getElementById('f_type').value = record.type;
+            document.getElementById('f_method').value = record.method;
+            document.getElementById('f_unit_price').value = record.unitPrice;
+            window.togglePriceInput();
+        }
+
+        function resetFuelFormState() {
+            editingFuelId = null;
+            document.querySelector('#fuelModal .modal-title').innerText = '新增加油紀錄';
+            document.querySelector('#fuelForm button[type="submit"]').innerText = '儲存';
+        }
+
+        function setMaintainFormToEditMode(record) {
+            editingMaintainId = record.id;
+            document.querySelector('#maintainModal .modal-title').innerText = '編輯保養紀錄';
+            document.querySelector('#maintainForm button[type="submit"]').innerText = '更新';
+
+            document.getElementById('m_date').value = record.date;
+            document.getElementById('m_km').value = record.km;
+            document.getElementById('m_cost').value = record.cost;
+            document.getElementById('m_points').value = record.points;
+            document.getElementById('m_paid').value = record.paid;
+        }
+
+        function resetMaintainFormState() {
+            editingMaintainId = null;
+            document.querySelector('#maintainModal .modal-title').innerText = '新增保養紀錄';
+            document.querySelector('#maintainForm button[type="submit"]').innerText = '儲存';
+        }
+
+        // --- 介面切換與圖表 (原封不動保留) ---
+        // 這部分與您原本的程式碼完全相同，負責切換分頁、計算圖表
+        // 為了節省篇幅，這裡只需保留您原本程式碼中 updateNavHighlight, switchTab, handleFabClick, togglePriceInput
+        // 以及 updateFuelUI, updateMaintainUI, renderFuelCharts, renderMaintainChart 這些函式即可。
+        // 請確保 updateFuelUI 裡面的變數是讀取全域的 fuelData
+
+        window.togglePriceInput = function() {
+            const method = document.getElementById('f_method').value;
+            const label = document.getElementById('price_label');
+            label.innerText = (method === 'self') ? "自助油價 (元/L)" : "人工油價 (元/L)";
+        }
+
+        window.switchTab = function(tabName) {
+            document.querySelectorAll('.section-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            const fabContainer = document.getElementById('main-fab');
+            const fabIcon = document.getElementById('fab-icon');
+
+            if(tabName === 'fuel') {
+                document.getElementById('fuel-section').classList.add('active');
+                document.querySelectorAll('.nav-item')[0].classList.add('active');
+                if(chart1) chart1.update();
+                if(chart2) chart2.update();
+                fabContainer.classList.add('show');
+                fabIcon.className = 'fa-solid fa-gas-pump';
+            } else if (tabName === 'maintain') {
+                document.getElementById('maintain-section').classList.add('active');
+                document.querySelectorAll('.nav-item')[1].classList.add('active');
+                if(chart3) chart3.update();
+                fabContainer.classList.add('show');
+                fabIcon.className = 'fa-solid fa-wrench';
+            } else {
+                document.getElementById('info-section').classList.add('active');
+                document.querySelectorAll('.nav-item')[2].classList.add('active');
+                fabContainer.classList.remove('show');
+            }
+            requestAnimationFrame(() => updateNavHighlight());
+        }
+
+        window.handleFabClick = function() {
+            const navItems = document.querySelectorAll('.nav-item');
+            if (navItems[0].classList.contains('active')) {
+                const modal = new bootstrap.Modal(document.getElementById('fuelModal'));
+                modal.show();
+            } else if (navItems[1].classList.contains('active')) {
+                const modal = new bootstrap.Modal(document.getElementById('maintainModal'));
+                modal.show();
+            }
+        }
+
+        function updateNavHighlight() {
+            const nav = document.querySelector('.nav-bottom');
+            const active = nav?.querySelector('.nav-item.active');
+            const highlight = document.getElementById('nav-highlight');
+            if (!nav || !active || !highlight) return;
+            const navRect = nav.getBoundingClientRect();
+            const itemRect = active.getBoundingClientRect();
+            const horizontalInset = 10;
+            const verticalInset = 2;
+            const verticalOffset = -1;
+            const rawLeft = itemRect.left - navRect.left;
+            const rawTop = itemRect.top - navRect.top;
+            const width = Math.max(44, itemRect.width - horizontalInset * 2);
+            const maxHeight = Math.max(48, navRect.height - verticalInset * 2);
+            const height = Math.min(Math.max(itemRect.height + 18, 56), maxHeight);
+            const left = rawLeft + horizontalInset;
+            const proposedTop = rawTop + (itemRect.height - height) / 2 + verticalOffset;
+            const minTop = verticalInset;
+            const maxTop = navRect.height - height - verticalInset;
+            const top = Math.min(Math.max(proposedTop, minTop), maxTop);
+            highlight.style.left = `${left}px`;
+            highlight.style.top = `${top}px`;
+            highlight.style.width = `${width}px`;
+            highlight.style.height = `${height}px`;
+        }
+
+        // --- 圖表與列表更新 (請將您原本的 updateFuelUI, updateMaintainUI, render... 函式貼回這裡) ---
+        // 重要：請確保 updateFuelUI 裡的迴圈變數是 fuelData (我們已經在 loadData 裡填入了)
+
+        function updateFuelUI() {
+            const tbody = document.getElementById('fuel-table-body');
+            tbody.innerHTML = '';
+            let cumulativeCost = 0;
+            let labels = [], costs = [], accumCosts = [], kms = [], consumptions = [];
+
+            fuelData.forEach((d, index) => {
+                cumulativeCost += d.cost;
+                let consumption = 0;
+                if (index === 0) {
+                    if(d.liter > 0) consumption = d.km / d.liter; // 第一筆邏輯
+                } else {
+                    const prevKm = fuelData[index-1].km;
+                    const deltaKm = d.km - prevKm;
+                    if(d.liter > 0 && deltaKm > 0) consumption = deltaKm / d.liter;
+                }
+
+                const row = `<tr>
+                <td>${d.date}</td>
+                <td>${d.km}</td>
+                <td>${d.liter}</td>
+                <td>${consumption.toFixed(2)}</td>
+                <td>${d.cost}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editFuel('${d.id}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteFuel('${d.id}')"><i class="fa-solid fa-trash"></i></button>
+                </td>
+            </tr>`;
+                tbody.innerHTML += row;
+                labels.push(d.date); costs.push(d.cost); accumCosts.push(cumulativeCost); kms.push(d.km); consumptions.push(consumption);
+            });
+
+            if(consumptions.length > 0) {
+                const validCons = consumptions.filter(c => c > 0);
+                const avg = validCons.length ? (validCons.reduce((a,b)=>a+b,0) / validCons.length) : 0;
+                document.getElementById('avg-fuel-cons').innerText = avg.toFixed(2) + " km/L";
+            }
+            document.getElementById('total-fuel-cost').innerText = "$" + cumulativeCost.toLocaleString();
+            renderFuelCharts(labels, costs, accumCosts, kms, consumptions);
+        }
+
+        function updateMaintainUI() {
+            const tbody = document.getElementById('maintain-table-body');
+            tbody.innerHTML = '';
+            let labels = [], costs = [], paids = [], kms = [];
+            let totalMaintainCost = 0;
+
+            maintainData.forEach(d => {
+                totalMaintainCost += d.cost;
+                const row = `<tr>
+                <td>${d.date}</td>
+                <td>${d.km}</td>
+                <td>${d.cost}</td>
+                <td>${d.paid}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editMaintain('${d.id}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteMaintain('${d.id}')"><i class="fa-solid fa-trash"></i></button>
+                </td>
+            </tr>`;
+                tbody.innerHTML += row;
+                labels.push(d.date); costs.push(d.cost); paids.push(d.paid); kms.push(d.km);
+            });
+            document.getElementById('total-maintain-cost').innerText = "$" + totalMaintainCost.toLocaleString();
+            renderMaintainChart(labels, costs, paids, kms);
+        }
+
+        function renderFuelCharts(labels, costs, accumCosts, kms, consumptions) {
+                const ctx1 = document.getElementById('fuelCostChart').getContext('2d');
+                if(chart1) chart1.destroy();
+                chart1 = new Chart(ctx1, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: '單次金額', data: costs, borderColor: '#3498db', backgroundColor: '#3498db', yAxisID: 'y' },
+                            { label: '累加金額', data: accumCosts, borderColor: '#e74c3c', borderDash: [5, 5], yAxisID: 'y1' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { position: 'left', title: {display: true, text: '單次金額'} },
+                            y1: { position: 'right', grid: {drawOnChartArea: false}, title: {display: true, text: '累加金額'} }
+                        }
+                    }
+                });
+
+                const ctx2 = document.getElementById('fuelEffChart').getContext('2d');
+                if(chart2) chart2.destroy();
+                chart2 = new Chart(ctx2, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: '里程', data: kms, backgroundColor: 'rgba(52, 73, 94, 0.5)', yAxisID: 'y' },
+                            { label: '油耗', data: consumptions, borderColor: '#2ecc71', type: 'line', yAxisID: 'y1', tension: 0.3 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { position: 'left', title: {display: true, text: '總里程'} },
+                            y1: { position: 'right', grid: {drawOnChartArea: false}, title: {display: true, text: '油耗 (km/L)'} }
+                        }
+                    }
+                });
+        }
+
+        function renderMaintainChart(labels, costs, paids, kms) {
+                const ctx3 = document.getElementById('maintainChart').getContext('2d');
+                if(chart3) chart3.destroy();
+                chart3 = new Chart(ctx3, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: '保養金額', data: costs, borderColor: '#e67e22', backgroundColor: '#e67e22', yAxisID: 'y' },
+                            { label: '實付金額', data: paids, borderColor: '#c0392b', backgroundColor: '#c0392b', yAxisID: 'y' },
+                            { label: '里程', data: kms, borderColor: '#7f8c8d', borderDash: [5,5], pointStyle: 'rectRot', yAxisID: 'y1' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { position: 'left', title: {display: true, text: '金額'} },
+                            y1: { position: 'right', grid: {drawOnChartArea: false}, title: {display: true, text: '里程'} }
+                        }
+                    }
+                });
+        }
+</script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+            .then(reg => console.log('SW Registered!', reg))
+            .catch(err => console.log('SW Error', err));
+        }
+    </script>
+</body>
+</html>
