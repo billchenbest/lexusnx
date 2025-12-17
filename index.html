@@ -494,7 +494,7 @@
                     <form id="maintainForm">
                         <div class="mb-3">
                             <label class="form-label">上傳服務明細表 (圖片)</label>
-                            <input type="file" class="form-control" accept="image/*">
+                            <input type="file" class="form-control" id="m_files" accept="image/*" multiple>
                         </div>
                         <hr>
                         <div class="mb-2"><label class="form-label">日期</label><input type="date" class="form-control" id="m_date" required></div>
@@ -514,7 +514,7 @@
     
     <script>
         // ★★★ 請將下方的網址換成您剛剛部署 GAS 產生的網址 ★★★
-        const GAS_URL = "https://script.google.com/macros/s/AKfycby9OAlc9hfigY2-SUdS-WTuiCQmX-i7xAoRRGDcCoqqo7VxSfz8bmdSN8d3QHJW5WlbPw/exec";
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbwGHcHprXwaogXEsZtpEiaE-RZ5I93wTuXe4vvxxb4wYDooJ5vXCcbHRvFuMlszIiU60A/exec";
 
         // 全域變數
         let fuelData = [];
@@ -531,6 +531,17 @@
             document.getElementById('m_points').addEventListener('input', updateMaintainCostAuto);
             document.getElementById('m_paid').addEventListener('input', updateMaintainCostAuto);
             updateMaintainCostAuto();
+
+            // 保養照片：限制最多 3 張
+            const maintainFilesEl = document.getElementById('m_files');
+            if (maintainFilesEl) {
+                maintainFilesEl.addEventListener('change', () => {
+                    if (maintainFilesEl.files && maintainFilesEl.files.length > 3) {
+                        alert('一次最多只能上傳 3 張照片，請重新選擇。');
+                        maintainFilesEl.value = '';
+                    }
+                });
+            }
 
             // 載入資料
             loadData();
@@ -619,6 +630,31 @@
             });
         }
 
+        function normalizeImageUrls(record) {
+            if (!record) return [];
+
+            const raw = (record.imageUrls !== undefined) ? record.imageUrls : record.imageUrl;
+            if (Array.isArray(raw)) return raw.filter(Boolean);
+
+            if (typeof raw === 'string') {
+                const trimmed = raw.trim();
+                if (!trimmed) return [];
+
+                // 可能是 JSON array 字串
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    if (Array.isArray(parsed)) return parsed.filter(Boolean);
+                } catch (_) {
+                    // ignore
+                }
+
+                // 退回用分隔符切
+                return trimmed.split(/\s*(?:\n|,|\|)\s*/).filter(Boolean);
+            }
+
+            return [];
+        }
+
         // 通用傳送資料函式 (使用 text/plain 避免 CORS 預檢問題)
         function sendToGAS(payload) {
             return fetch(GAS_URL, {
@@ -675,35 +711,46 @@
             // 確保送出前先更新一次自動計算金額
             updateMaintainCostAuto();
 
-            // 取得檔案輸入框
-            const fileInput = e.target.querySelector('input[type="file"]');
-            const file = fileInput && fileInput.files && fileInput.files.length > 0 ? fileInput.files[0] : null;
+            // 取得檔案輸入框 (最多 3 張)
+            const fileInput = document.getElementById('m_files') || e.target.querySelector('input[type="file"]');
+            const selectedFiles = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
 
-            let fileData = "";
-            let fileName = "";
-            let mimeType = "";
+            if (selectedFiles.length > 3) {
+                alert('一次最多只能上傳 3 張照片，請重新選擇。');
+                submitBtn.disabled = false;
+                submitBtn.innerText = originalBtnText;
+                return;
+            }
 
-            // 如果有選檔案，進行轉換
-            if (file) {
-                try {
-                    // 簡單的防呆：如果檔案大於 5MB 提示一下 (GAS 限制較大但網路慢會傳很久)
-                    if (file.size > 5 * 1024 * 1024) {
-                        if(!confirm("照片超過 5MB，上傳可能會很久，確定要繼續嗎？")) {
-                            submitBtn.disabled = false;
-                            submitBtn.innerText = originalBtnText;
-                            return;
-                        }
-                    }
-                    fileData = await fileToBase64(file);
-                    fileName = file.name;
-                    mimeType = file.type;
-                } catch (err) {
-                    console.error("檔案轉換失敗", err);
-                    alert("照片處理失敗");
+            const files = [];
+
+            // 防呆：任一檔案 > 5MB 先提示
+            const hasLargeFile = selectedFiles.some(f => f && f.size > 5 * 1024 * 1024);
+            if (hasLargeFile) {
+                if (!confirm('照片超過 5MB，上傳可能會很久，確定要繼續嗎？')) {
                     submitBtn.disabled = false;
                     submitBtn.innerText = originalBtnText;
                     return;
                 }
+            }
+
+            // 轉 Base64
+            try {
+                for (const f of selectedFiles) {
+                    if (!f) continue;
+                    const base64 = await fileToBase64(f);
+                    files.push({
+                        fileData: base64,
+                        fileName: f.name,
+                        mimeType: f.type
+                    });
+                }
+            } catch (err) {
+                console.error('檔案轉換失敗', err);
+                alert('照片處理失敗');
+                submitBtn.disabled = false;
+                submitBtn.innerText = originalBtnText;
+                return;
             }
             
             // 找出目前這筆資料的舊圖片連結 (如果是編輯模式)
@@ -712,6 +759,10 @@
                 currentRecord = maintainData.find(x => x.id === editingMaintainId);
             }
 
+            const existingImageUrls = normalizeImageUrls(currentRecord);
+            const shouldKeepExisting = files.length === 0;
+            const firstFile = files.length ? files[0] : null;
+
             const record = {
                 id: editingMaintainId,
                 date: document.getElementById('m_date').value,
@@ -719,12 +770,17 @@
                 cost: Number(document.getElementById('m_cost').value),
                 points: Number(document.getElementById('m_points').value || 0),
                 paid: Number(document.getElementById('m_paid').value),
-                // 如果是編輯模式且沒選新檔案，把舊的連結傳回去，不然 GAS 會以為沒圖
-                imageUrl: currentRecord && currentRecord.imageUrl ? currentRecord.imageUrl : "", 
-                // 檔案資料
-                fileData: fileData,
-                fileName: fileName,
-                mimeType: mimeType
+                // 如果是編輯模式且沒選新檔案，把舊的連結傳回去
+                imageUrls: shouldKeepExisting ? existingImageUrls : [],
+
+                // 檔案資料 (新格式：最多 3 張)
+                files: files,
+
+                // 相容舊版後端 (只吃單張)
+                imageUrl: (shouldKeepExisting ? (existingImageUrls[0] || "") : ""),
+                fileData: firstFile ? firstFile.fileData : "",
+                fileName: firstFile ? firstFile.fileName : "",
+                mimeType: firstFile ? firstFile.mimeType : ""
             };
 
             const action = editingMaintainId ? 'edit' : 'add';
@@ -953,10 +1009,12 @@
             maintainData.forEach(d => {
                 totalMaintainCost += d.cost;
                 totalMaintainPaid += d.paid;
-                // 檢查 d.imageUrl 是否有值，有的話顯示按鈕
-                const imgBtn = d.imageUrl ? 
-                    `<a href="${d.imageUrl}" target="_blank" class="btn btn-sm btn-outline-info me-1"><i class="fa-solid fa-image"></i></a>` : 
-                    ``;
+                const imgUrls = normalizeImageUrls(d).slice(0, 3);
+                const imgBtn = imgUrls.length
+                    ? imgUrls.map((url, idx) => (
+                        `<a href="${url}" target="_blank" class="btn btn-sm btn-outline-info me-1" title="照片${idx + 1}"><i class="fa-solid fa-image"></i></a>`
+                    )).join('')
+                    : ``;
                 const row = `<tr>
                 <td>${d.date}</td>
                 <td>${d.km}</td>
