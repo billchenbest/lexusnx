@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lexus-app-v2';
+const CACHE_NAME = 'lexus-app-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -18,6 +18,19 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
       return cache.addAll(ASSETS);
+    })
+  );
+});
+
+// 清除舊版快取
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys => {
+      return Promise.all(
+        keys
+          .filter(key => key.startsWith('lexus-app-') && key !== CACHE_NAME)
+          .map(key => caches.delete(key))
+      );
     })
   );
 });
