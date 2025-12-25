@@ -291,6 +291,31 @@
             color: #555;
             text-align: center;
         }
+
+        /* View Receipt Button */
+        .btn-view-receipt {
+            background: #fff;
+            color: var(--lexus-black);
+            border: 1px solid #ddd;
+            border-radius: 50px;
+            padding: 6px 14px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .btn-view-receipt i { color: var(--lexus-gold); }
+        .btn-view-receipt:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border-color: var(--lexus-gold);
+            background: #fff;
+        }
     </style>
 </head>
 <body>
@@ -351,10 +376,16 @@
 
     <div id="maintain-section" class="section-content">
         <div class="row mb-3">
-            <div class="col-12">
+            <div class="col-6">
                 <div class="stat-card">
                     <div class="stat-label">總保養花費</div>
                     <div class="stat-value" id="total-maintain-cost">--</div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="stat-card">
+                    <div class="stat-label">實際總花費</div>
+                    <div class="stat-value" id="total-maintain-paid">--</div>
                 </div>
             </div>
         </div>
@@ -376,6 +407,7 @@
                             <th>里程</th>
                             <th>保養金額</th>
                             <th>實付</th>
+                            <th>單據</th>
                             <th style="width: 110px;">操作</th>
                         </tr>
                     </thead>
@@ -503,12 +535,27 @@
         </div>
     </div>
 
+    <!-- Image Viewer Modal -->
+    <div class="modal fade" id="imageViewerModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">檢視單據</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center" id="imageViewerBody">
+                    <!-- Links will be injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script>
         // ★★★ 請將下方的網址換成您剛剛部署 GAS 產生的網址 ★★★
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbxV1Unb6LntpoO9j_tXyhi9RuJh_CuGgzztOoQ3x7WFI2L6pgJQ_-e-u9bxxZ1Qzsbudg/exec";
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbwTZZtGhkV5vahiMYV-Sm4Q4VPBqCbhW3-m9I_pDfQPt6fboSBX_lj5231_wZwTbPZKQw/exec";
 
         // 全域變數
         let fuelData = [];
@@ -570,6 +617,14 @@
                         ...d,
                         date: formatDate(d.date)
                     })).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                    // Debug once: confirm what image field actually looks like
+                    if (!window.__maintainImageDebugLogged) {
+                        window.__maintainImageDebugLogged = true;
+                        console.log('[Maintain] first record:', maintainData[0]);
+                        console.log('[Maintain] keys:', maintainData[0] ? Object.keys(maintainData[0]) : []);
+                        console.log('[Maintain] imageUrl raw:', maintainData[0]?.imageUrl);
+                    }
                     updateMaintainUI();
                 })
                 .catch(err => console.error("載入保養失敗", err));
@@ -855,19 +910,90 @@
             renderFuelCharts(labels, costs, accumCosts, kms, consumptions);
         }
 
+        // Helper to parse images safely
+        function parseReceiptImages(record) {
+            let raw = null;
+
+            // 1. Priority check for exact matches
+            if (record.imageUrl !== undefined) raw = record.imageUrl;
+            else if (record.imageurl !== undefined) raw = record.imageurl;
+            else if (record.ImageUrl !== undefined) raw = record.ImageUrl;
+            
+            // 2. Fuzzy search for keys containing 'image' or 'url' if exact match failed
+            if (!raw) {
+                const keys = Object.keys(record);
+                for (const key of keys) {
+                    const lowerKey = key.toLowerCase();
+                    // Skip known non-image keys
+                    if (['id', 'date', 'km', 'cost', 'points', 'paid', 'type', 'method', 'unitprice'].includes(lowerKey)) continue;
+
+                    if ((lowerKey.includes('image') || lowerKey.includes('url') || lowerKey.includes('img')) && record[key]) {
+                        raw = record[key];
+                        break;
+                    }
+                }
+            }
+
+            if (!raw) return [];
+            
+            // If it's already an array, return it
+            if (Array.isArray(raw)) return raw;
+            
+            if (typeof raw === 'string') {
+                raw = raw.trim();
+                if (raw === "") return [];
+                
+                // Strategy A: Try JSON parse
+                if (raw.startsWith('[')) {
+                    try {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed)) return parsed;
+                    } catch (e) {
+                        console.warn("JSON parse failed, falling back to regex", e);
+                    }
+                }
+                
+                // Strategy B: Regex extraction (The most robust way)
+                // Extracts anything starting with http/https until it hits a quote, bracket, comma or whitespace
+                const urlRegex = /https?:\/\/[^"'\s,\]]+/g;
+                const matches = raw.match(urlRegex);
+                if (matches && matches.length > 0) {
+                    return matches;
+                }
+            }
+            return [];
+        }
+
         function updateMaintainUI() {
             const tbody = document.getElementById('maintain-table-body');
             tbody.innerHTML = '';
             let labels = [], costs = [], paids = [], kms = [];
             let totalMaintainCost = 0;
+            let totalPaidCost = 0;
 
             maintainData.forEach(d => {
-                totalMaintainCost += d.cost;
+                totalMaintainCost += (Number(d.cost) || 0);
+                totalPaidCost += (Number(d.paid) || 0);
+
+                const imgs = parseReceiptImages(d);
+                const imageCount = imgs.length;
+                const hasImage = imageCount > 0;
+
+                let imageBtn = '';
+                if (hasImage) {
+                    imageBtn = `<button class="btn-view-receipt" onclick="viewReceipts('${d.id}')">
+                        <i class="fa-solid fa-image"></i> 檢視 (${imageCount})
+                    </button>`;
+                } else {
+                    imageBtn = '<span class="text-muted" style="font-size:0.8rem;">-</span>';
+                }
+
                 const row = `<tr>
                 <td>${d.date}</td>
                 <td>${d.km}</td>
                 <td>${d.cost}</td>
                 <td>${d.paid}</td>
+                <td>${imageBtn}</td>
                 <td>
                     <button class="btn btn-sm btn-outline-secondary me-1" onclick="editMaintain('${d.id}')"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteMaintain('${d.id}')"><i class="fa-solid fa-trash"></i></button>
@@ -876,8 +1002,44 @@
                 tbody.innerHTML += row;
                 labels.push(d.date); costs.push(d.cost); paids.push(d.paid); kms.push(d.km);
             });
+            
             document.getElementById('total-maintain-cost').innerText = "$" + totalMaintainCost.toLocaleString();
+            
+            // Update Total Paid
+            const paidEl = document.getElementById('total-maintain-paid');
+            if(paidEl) paidEl.innerText = "$" + totalPaidCost.toLocaleString();
+            
             renderMaintainChart(labels, costs, paids, kms);
+        }
+
+        window.viewReceipts = function(id) {
+            const record = maintainData.find(x => x.id === id);
+            if (!record) return;
+
+            const imgs = parseReceiptImages(record);
+
+            if (imgs.length === 0) {
+                alert("無單據圖片");
+                return;
+            }
+
+            if (imgs.length === 1) {
+                window.open(imgs[0], '_blank');
+            } else {
+                // Show Modal
+                const modalBody = document.getElementById('imageViewerBody');
+                modalBody.innerHTML = '';
+                imgs.forEach((url, idx) => {
+                    const btn = document.createElement('a');
+                    btn.href = url;
+                    btn.target = '_blank';
+                    btn.className = 'btn btn-outline-dark w-100 mb-2 p-3 rounded-4 fw-bold';
+                    btn.innerHTML = `<i class="fa-solid fa-arrow-up-right-from-square me-2"></i> 開啟單據 ${idx + 1}`;
+                    modalBody.appendChild(btn);
+                });
+                const modal = new bootstrap.Modal(document.getElementById('imageViewerModal'));
+                modal.show();
+            }
         }
 
         function renderFuelCharts(labels, costs, accumCosts, kms, consumptions) {
@@ -950,12 +1112,17 @@
 </script>
 
     <script>
-        if ('serviceWorker' in navigator) {
+        if (
+            'serviceWorker' in navigator &&
+            (location.protocol === 'https:' || location.protocol === 'http:')
+        ) {
             navigator.serviceWorker.register('sw.js')
             .then(reg => console.log('SW Registered!', reg))
             .catch(err => console.log('SW Error', err));
+        } else {
+            // Opened via file:// (origin null) or SW unsupported
+            console.log('SW skipped (unsupported origin/protocol)');
         }
     </script>
 </body>
 </html>
-
